@@ -24,11 +24,12 @@ var openMap = map[string]func(string) gorm.Dialector{
 
 func main() {
 	var dbType, dns, sql string
-	var format bool
+	var format, array bool
 	flag.StringVar(&dbType, "db", "mysql", "database type, mysql,postgres,sqlite,sqlserver,clickhouse")
 	flag.StringVar(&dns, "dns", "", "see https://gorm.io/docs/connecting_to_the_database.html#SQLite")
 	flag.StringVar(&sql, "sql", "", "select * from mysql")
 	flag.BoolVar(&format, "format", false, "output format json")
+	flag.BoolVar(&array, "array", false, "output json array. default output json lines")
 	flag.Parse()
 	open := openMap[dbType]
 	if open == nil || len(dns) == 0 || len(sql) == 0 {
@@ -44,19 +45,38 @@ func main() {
 		log.Fatal(err)
 	}
 	defer rows.Close()
-	encoder := json.NewEncoder(os.Stdout)
+	out := os.Stdout
+	encoder := json.NewEncoder(out)
 	if format {
 		encoder.SetIndent("", "\t")
 	}
+	first := true
 	for rows.Next() {
 		var m map[string]interface{}
 		err = db.ScanRows(rows, &m)
 		if err != nil {
 			log.Fatal(err)
 		}
+		if array {
+			if first {
+				out.Write([]byte{'['})
+				if format {
+					out.Write([]byte{'\n'})
+				}
+				first = false
+			} else {
+				out.Write([]byte{','})
+				if format {
+					out.Write([]byte{'\n'})
+				}
+			}
+		}
 		err = encoder.Encode(m)
 		if err != nil {
 			log.Fatal(err)
 		}
+	}
+	if array {
+		out.Write([]byte{']'})
 	}
 }
